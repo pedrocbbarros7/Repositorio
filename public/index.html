@@ -1,351 +1,404 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Combustíveis São Luís – MA</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Combustíveis São Luís</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .spinner { border:3px solid #e5e7eb; border-top-color:#2563eb; border-radius:50%; width:2rem; height:2rem; animation:spin .7s linear infinite; }
+    .spinner { border:3px solid #e5e7eb; border-top-color:#2563eb; border-radius:50%; width:2rem; height:2rem; animation:spin .7s linear infinite; display:inline-block; }
     @keyframes spin { to { transform:rotate(360deg); } }
-    th[data-sort] { cursor:pointer; user-select:none; }
-    th[data-sort]:hover { background:#e5e7eb; }
-    th[data-sort].asc::after  { content:" ▲"; font-size:.65rem; }
-    th[data-sort].desc::after { content:" ▼"; font-size:.65rem; }
+    .card-preco { font-variant-numeric: tabular-nums; }
+    .btn-produto.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+    #gps-btn.locating { animation:pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    ::-webkit-scrollbar { height:4px; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:9999px; }
   </style>
 </head>
-<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+<body class="bg-gray-100 min-h-screen font-sans text-gray-800">
 
-<!-- Header -->
-<header class="bg-blue-700 text-white shadow-md">
-  <div class="max-w-6xl mx-auto px-4 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+<!-- Header fixo -->
+<header class="bg-blue-700 text-white shadow-lg sticky top-0 z-20">
+  <div class="px-4 py-3 flex items-center justify-between gap-3">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">⛽ Preços de Combustíveis</h1>
-      <p class="text-blue-200 text-sm mt-0.5">São Luís – Maranhão · Fonte: ANP / dados.gov.br</p>
+      <h1 class="text-lg font-bold leading-tight">⛽ Combustíveis São Luís</h1>
+      <p id="periodo-label" class="text-blue-200 text-xs"></p>
     </div>
-    <div class="text-right text-sm">
-      <div id="periodo-label" class="text-blue-100 font-medium"></div>
-      <div id="last-updated" class="text-blue-300 text-xs mt-0.5"></div>
-    </div>
+    <button id="gps-btn"
+      class="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-semibold px-3 py-2 rounded-xl text-sm transition whitespace-nowrap">
+      📍 Perto de mim
+    </button>
   </div>
 </header>
 
-<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+<!-- Banner demo -->
+<div id="demo-banner" class="hidden bg-amber-50 border-b border-amber-300 px-4 py-3 text-sm flex gap-2 items-center">
+  <span class="text-amber-700">⚠️ Dados de amostra.</span>
+  <a href="https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/serie-historica-de-precos-de-combustiveis"
+     target="_blank" class="text-blue-600 font-medium underline">Baixar CSV real da ANP</a>
+</div>
 
-  <!-- Banner modo demo -->
-  <div id="demo-banner" class="hidden bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-    <div class="flex-1">
-      <p class="font-semibold text-amber-800">⚠️ Modo demonstração — dados de amostra</p>
-      <p class="text-amber-700 text-sm mt-0.5">
-        Sem conexão com o servidor da ANP. Para ver dados reais, baixe o CSV da ANP e carregue abaixo.
-      </p>
-    </div>
-    <a href="https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/serie-historica-de-precos-de-combustiveis"
-       target="_blank"
-       class="bg-amber-600 hover:bg-amber-700 text-white font-semibold px-4 py-2 rounded-lg text-sm whitespace-nowrap">
-      Baixar CSV da ANP ↗
-    </a>
-  </div>
-
-  <!-- Upload CSV -->
-  <div id="upload-section" class="hidden bg-white border border-gray-200 rounded-xl p-5">
-    <p class="font-semibold text-gray-700 mb-3">📂 Carregar CSV da ANP</p>
-    <div id="drop-zone"
-      class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition"
-      ondragover="event.preventDefault()" ondrop="handleDrop(event)" onclick="document.getElementById('csv-input').click()">
-      <p class="text-gray-500 text-sm">Arraste o arquivo CSV aqui ou <span class="text-blue-600 font-medium">clique para selecionar</span></p>
-      <p class="text-gray-400 text-xs mt-1">Arquivo: ca-AAAA-SS.csv da ANP</p>
-      <input type="file" id="csv-input" accept=".csv" class="hidden" onchange="handleFile(this.files[0])" />
-    </div>
-    <p id="upload-status" class="text-sm mt-2 text-gray-500"></p>
-  </div>
-
-  <!-- Filtros -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-wrap gap-4 items-end">
-    <div class="flex-1 min-w-[160px]">
-      <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Combustível</label>
-      <select id="filter-product" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">Todos</option>
-      </select>
-    </div>
-    <div class="flex-1 min-w-[160px]">
-      <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Bairro</label>
-      <select id="filter-bairro" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">Todos os bairros</option>
-      </select>
-    </div>
-    <div class="flex-1 min-w-[200px]">
-      <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Buscar posto</label>
-      <input id="filter-search" type="text" placeholder="Nome, bairro ou endereço…"
-        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-    </div>
-    <div class="flex gap-2">
-      <button id="btn-refresh" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg text-sm transition">
-        Atualizar
-      </button>
-      <button id="btn-toggle-upload" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-lg text-sm transition">
-        📂 CSV
-      </button>
-    </div>
-  </section>
-
-  <!-- Cards de resumo -->
-  <section id="summary-cards" class="hidden grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
-
-  <!-- Loading -->
-  <div id="loading" class="flex flex-col items-center justify-center py-24 gap-4">
-    <div class="spinner"></div>
-    <p class="text-gray-500 text-sm" id="loading-msg">Carregando dados…</p>
-  </div>
-
-  <!-- Erro -->
-  <div id="error-box" class="hidden bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-    <p class="text-red-700 font-semibold text-lg mb-1">Erro ao carregar</p>
-    <p id="error-msg" class="text-red-500 text-sm mb-4"></p>
-    <button onclick="loadAll()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">
-      Tentar novamente
+<!-- Barra de busca -->
+<div class="sticky top-[60px] z-10 bg-gray-100 px-4 pt-3 pb-2 shadow-sm">
+  <div class="flex gap-2">
+    <input id="search" type="search" placeholder="🔍 Nome do posto ou bairro…"
+      class="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"/>
+    <button id="btn-upload" class="bg-white border border-gray-300 rounded-xl px-3 py-2.5 text-sm shadow-sm hover:bg-gray-50">
+      📂
     </button>
   </div>
 
-  <!-- Tabela -->
-  <section id="table-section" class="hidden">
-    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-      <h2 class="text-lg font-semibold text-gray-700">
-        Postos: <span id="count-label" class="text-blue-600">0</span>
-      </h2>
-      <span class="text-xs text-gray-400">Clique no cabeçalho para ordenar</span>
-    </div>
-    <div class="overflow-x-auto rounded-xl shadow-sm border border-gray-200">
-      <table class="min-w-full text-sm bg-white">
-        <thead class="bg-gray-100 text-gray-600 text-xs uppercase">
-          <tr>
-            <th class="px-4 py-3 text-left" data-sort="nome">Posto</th>
-            <th class="px-4 py-3 text-left" data-sort="produto">Combustível</th>
-            <th class="px-4 py-3 text-left" data-sort="bairro">Bairro</th>
-            <th class="px-4 py-3 text-left" data-sort="bandeira">Bandeira</th>
-            <th class="px-4 py-3 text-left">Endereço</th>
-            <th class="px-4 py-3 text-right" data-sort="preco">Preço (R$)</th>
-            <th class="px-4 py-3 text-right" data-sort="data">Coleta</th>
-          </tr>
-        </thead>
-        <tbody id="table-body" class="divide-y divide-gray-100"></tbody>
-      </table>
-    </div>
-    <div id="pagination" class="flex items-center justify-center gap-2 mt-5 flex-wrap"></div>
-  </section>
-
-  <div id="empty-box" class="hidden text-center py-20 text-gray-400">
-    <p class="text-5xl mb-3">🔍</p>
-    <p class="font-semibold">Nenhum resultado para esse filtro.</p>
+  <!-- Filtros de produto (scroll horizontal) -->
+  <div class="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
+    <button class="btn-produto active flex-shrink-0 border border-blue-600 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition" data-produto="">Todos</button>
+    <button class="btn-produto flex-shrink-0 border border-gray-300 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap bg-white transition" data-produto="ETANOL HIDRATADO">Etanol</button>
+    <button class="btn-produto flex-shrink-0 border border-gray-300 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap bg-white transition" data-produto="GASOLINA COMUM">Gasolina</button>
+    <button class="btn-produto flex-shrink-0 border border-gray-300 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap bg-white transition" data-produto="GASOLINA ADITIVADA">Aditivada</button>
+    <button class="btn-produto flex-shrink-0 border border-gray-300 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap bg-white transition" data-produto="DIESEL S10">Diesel S10</button>
+    <button class="btn-produto flex-shrink-0 border border-gray-300 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap bg-white transition" data-produto="GNV">GNV</button>
   </div>
 
-</main>
+  <!-- Ordenação -->
+  <div class="flex gap-2 mt-2 items-center text-xs text-gray-500">
+    <span class="font-medium">Ordenar:</span>
+    <button id="sort-preco" class="sort-opt px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold" data-sort="preco">Menor preço</button>
+    <button id="sort-dist"  class="sort-opt px-2 py-0.5 rounded-full bg-white border border-gray-300 text-gray-600 font-medium" data-sort="distancia">Mais próximo</button>
+    <span class="ml-auto text-gray-400" id="count-label">…</span>
+  </div>
+</div>
 
-<footer class="text-center text-xs text-gray-400 py-6 mt-4 border-t border-gray-100">
-  Dados: ANP – Levantamento de Preços de Combustíveis (semanal) &nbsp;|&nbsp;
-  <a href="https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/serie-historica-de-precos-de-combustiveis"
-     target="_blank" class="text-blue-500 hover:underline">Baixar CSV</a>
-  &nbsp;|&nbsp;
-  <a href="https://preco.anp.gov.br/" target="_blank" class="text-blue-500 hover:underline">Infopreço diário</a>
-</footer>
+<!-- Cards de resumo (médias) -->
+<div id="summary-bar" class="hidden flex gap-3 overflow-x-auto px-4 py-3 no-scrollbar"></div>
+
+<!-- Loading -->
+<div id="loading" class="flex flex-col items-center justify-center py-24 gap-3">
+  <div class="spinner"></div>
+  <p class="text-gray-500 text-sm">Carregando dados…</p>
+</div>
+
+<!-- GPS loading -->
+<div id="gps-loading" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-2xl p-6 text-center shadow-xl mx-4">
+    <div class="spinner mx-auto mb-3"></div>
+    <p class="font-semibold text-gray-800">Obtendo sua localização…</p>
+    <p class="text-gray-500 text-sm mt-1">Permita o acesso ao GPS quando solicitado</p>
+  </div>
+</div>
+
+<!-- Erro -->
+<div id="error-box" class="hidden mx-4 mt-4 bg-red-50 border border-red-200 rounded-xl p-5 text-center">
+  <p class="text-red-700 font-semibold mb-1">Erro ao carregar</p>
+  <p id="error-msg" class="text-red-500 text-sm mb-3"></p>
+  <button onclick="loadAll()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">Tentar novamente</button>
+</div>
+
+<!-- Upload panel -->
+<div id="upload-panel" class="hidden mx-4 mt-3 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+  <p class="font-semibold text-gray-700 text-sm mb-2">📂 Carregar CSV da ANP</p>
+  <label class="block border-2 border-dashed border-gray-300 rounded-xl p-5 text-center cursor-pointer hover:border-blue-400 transition"
+    ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+    <p class="text-gray-500 text-sm">Toque para selecionar o arquivo</p>
+    <p class="text-gray-400 text-xs mt-0.5">ca-AAAA-SS.csv da ANP</p>
+    <input type="file" accept=".csv" class="hidden" onchange="handleFile(this.files[0])"/>
+  </label>
+  <p id="upload-status" class="text-xs mt-2 text-gray-500"></p>
+</div>
+
+<!-- Lista de postos -->
+<div id="cards-container" class="px-4 py-3 space-y-3 pb-10"></div>
+
+<!-- Vazio -->
+<div id="empty-box" class="hidden text-center py-20 text-gray-400">
+  <p class="text-5xl mb-3">🔍</p>
+  <p class="font-semibold">Nenhum posto encontrado.</p>
+</div>
+
+<!-- Botão carregar mais -->
+<div id="load-more-wrap" class="hidden px-4 pb-8">
+  <button id="btn-load-more"
+    class="w-full bg-white border border-gray-300 text-gray-700 font-semibold py-3 rounded-xl text-sm hover:bg-gray-50 active:bg-gray-100 transition shadow-sm">
+    Mostrar mais postos
+  </button>
+</div>
+
+<style>.no-scrollbar::-webkit-scrollbar{display:none;}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}</style>
 
 <script>
-const API   = '/api';
-const PG_SZ = 50;
+const API    = '/api';
+const PAGE   = 30;
 
-let allItems = [], filtered = [], page = 1, sortCol = 'preco', sortDir = 'asc';
+let allItems  = [];
+let filtered  = [];
+let shown     = 0;
+let sortMode  = 'preco';
+let prodFilt  = '';
+let searchQ   = '';
+let userLat   = null;
+let userLng   = null;
 
 const $ = id => document.getElementById(id);
 const show = id => $(id).classList.remove('hidden');
 const hide = id => $(id).classList.add('hidden');
 
-function setLoading(msg) { $('loading-msg').textContent = msg||'Carregando…'; show('loading'); hide('error-box'); hide('table-section'); $('summary-cards').classList.add('hidden'); hide('empty-box'); }
-function showError(msg)  { hide('loading'); $('error-msg').textContent = msg; show('error-box'); }
-
-async function loadAll(forceRefresh) {
-  setLoading('Carregando dados…');
-  try {
-    if (forceRefresh) await fetch(`${API}/cache/clear`, { method:'POST' }).catch(()=>{});
-    const [dataRes, pRes, bRes] = await Promise.all([
-      fetch(`${API}/precos?limit=2000`).then(r=>r.json()),
-      fetch(`${API}/produtos`).then(r=>r.json()),
-      fetch(`${API}/bairros`).then(r=>r.json()),
-    ]);
-    if (!dataRes.success) throw new Error(dataRes.error||'Erro desconhecido');
-
-    allItems = dataRes.items;
-
-    if (dataRes.meta?.periodo) $('periodo-label').textContent = `Período: ${dataRes.meta.periodo}`;
-    if (dataRes.meta?.fetchedAt) {
-      const d = new Date(dataRes.meta.fetchedAt);
-      $('last-updated').textContent = `Atualizado: ${d.toLocaleString('pt-BR')}`;
-    }
-
-    // Banner demo
-    if (dataRes.demo) { show('demo-banner'); show('upload-section'); }
-    else              { hide('demo-banner'); }
-
-    if (pRes.success) $('filter-product').innerHTML = '<option value="">Todos</option>' + pRes.produtos.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
-    if (bRes.success) $('filter-bairro').innerHTML  = '<option value="">Todos os bairros</option>' + bRes.bairros.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
-
-    renderCards(dataRes.summary||[]);
-    applyFilters();
-  } catch(err) { showError(err.message); } finally { hide('loading'); }
+/* ── Cores por produto ────────────────────────── */
+const CORES = {
+  'ETANOL HIDRATADO':   { bg:'bg-green-100',  text:'text-green-800',  dot:'🟢' },
+  'GASOLINA COMUM':     { bg:'bg-blue-100',   text:'text-blue-800',   dot:'🔵' },
+  'GASOLINA ADITIVADA': { bg:'bg-indigo-100', text:'text-indigo-800', dot:'🟣' },
+  'DIESEL S10':         { bg:'bg-yellow-100', text:'text-yellow-800', dot:'🟡' },
+  'DIESEL':             { bg:'bg-orange-100', text:'text-orange-800', dot:'🟠' },
+  'GNV':                { bg:'bg-purple-100', text:'text-purple-800', dot:'🔴' },
+};
+function cor(p) {
+  for (const [k,v] of Object.entries(CORES)) if (p.includes(k)) return v;
+  return { bg:'bg-gray-100', text:'text-gray-700', dot:'⚪' };
 }
 
-// ── Cards ─────────────────────────────────────
-const CARD_DEFS = [
-  {key:'ETANOL HIDRATADO',   label:'Etanol Hidratado',   c:'green' },
-  {key:'GASOLINA COMUM',     label:'Gasolina Comum',     c:'blue'  },
-  {key:'GASOLINA ADITIVADA', label:'Gasolina Aditivada', c:'indigo'},
-  {key:'DIESEL S10',         label:'Diesel S10',         c:'yellow'},
+/* ── Resumo topo ─────────────────────────────── */
+const RESUMO_PRODS = [
+  {key:'ETANOL HIDRATADO', label:'Etanol', c:'green'},
+  {key:'GASOLINA COMUM',   label:'Gasolina', c:'blue'},
+  {key:'DIESEL S10',       label:'Diesel S10', c:'yellow'},
 ];
-const CL = {
-  green:  {bg:'bg-green-50', border:'border-green-200', text:'text-green-700', badge:'bg-green-100 text-green-800'},
-  blue:   {bg:'bg-blue-50',  border:'border-blue-200',  text:'text-blue-700',  badge:'bg-blue-100 text-blue-800' },
-  indigo: {bg:'bg-indigo-50',border:'border-indigo-200',text:'text-indigo-700',badge:'bg-indigo-100 text-indigo-800'},
-  yellow: {bg:'bg-yellow-50',border:'border-yellow-200',text:'text-yellow-700',badge:'bg-yellow-100 text-yellow-800'},
-};
-function renderCards(summary) {
-  const cont = $('summary-cards'); cont.innerHTML = '';
-  CARD_DEFS.forEach(({key,label,c}) => {
-    const s = summary.find(x=>x.produto.includes(key)); if (!s) return;
-    const cl = CL[c];
-    cont.insertAdjacentHTML('beforeend',`
-      <div class="${cl.bg} ${cl.border} border rounded-xl p-4 space-y-1">
-        <p class="text-xs font-semibold text-gray-500 uppercase">${label}</p>
-        <p class="${cl.text} text-3xl font-bold">R$ ${fmt(s.media)}</p>
-        <p class="text-xs text-gray-500">Média · ${s.count} posto${s.count>1?'s':''}</p>
-        <div class="flex gap-2 pt-1 text-xs flex-wrap">
-          <span class="${cl.badge} px-2 py-0.5 rounded-full">Mín R$ ${fmt(s.minimo)}</span>
-          <span class="${cl.badge} px-2 py-0.5 rounded-full">Máx R$ ${fmt(s.maximo)}</span>
-        </div>
+function renderSummary(summary) {
+  const bar = $('summary-bar');
+  bar.innerHTML = '';
+  RESUMO_PRODS.forEach(({key, label, c}) => {
+    const s = summary.find(x => x.produto.includes(key));
+    if (!s) return;
+    bar.insertAdjacentHTML('beforeend', `
+      <div class="flex-shrink-0 bg-white rounded-xl px-4 py-2.5 shadow-sm border border-gray-100 text-center min-w-[100px]">
+        <p class="text-xs text-gray-500 font-medium">${label}</p>
+        <p class="text-xl font-bold text-gray-900 card-preco">R$ ${fmt(s.media)}</p>
+        <p class="text-xs text-gray-400">Mín <b class="text-${c}-600">R$ ${fmt(s.minimo)}</b></p>
       </div>`);
   });
-  if (cont.children.length > 0) { cont.classList.remove('hidden'); cont.classList.add('grid'); }
+  if (bar.children.length) show('summary-bar');
 }
 
-// ── Filter & Sort ─────────────────────────────
+/* ── Cards de posto ──────────────────────────── */
+function renderCard(r) {
+  const c   = cor(r.produto);
+  const km  = r.distancia != null ? `<span class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">📍 ${r.distancia < 1 ? (r.distancia*1000).toFixed(0)+'m' : r.distancia.toFixed(1)+'km'}</span>` : '';
+  const maps = r.lat && r.lng
+    ? `<a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank"
+         class="text-xs text-blue-600 font-medium flex items-center gap-1 hover:underline">
+         🗺️ Ver no mapa
+       </a>`
+    : '';
+
+  return `
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 active:bg-gray-50 transition">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-gray-900 leading-snug truncate">${esc(r.nome)}</p>
+          <p class="text-xs text-gray-500 mt-0.5 truncate">📌 ${esc(r.bairro)}${r.endereco ? ' · ' + esc(r.endereco) : ''}</p>
+          ${r.bandeira ? `<p class="text-xs text-gray-400 mt-0.5">${esc(r.bandeira)}</p>` : ''}
+        </div>
+        <div class="text-right flex-shrink-0">
+          <p class="text-2xl font-bold text-gray-900 card-preco">R$ ${fmt(r.preco)}</p>
+          <p class="text-xs text-gray-400">${r.unidade || 'R$/l'}</p>
+        </div>
+      </div>
+      <div class="flex items-center justify-between mt-3 flex-wrap gap-2">
+        <span class="${c.bg} ${c.text} text-xs font-semibold px-2.5 py-1 rounded-full">${c.dot} ${esc(r.produto)}</span>
+        <div class="flex items-center gap-2">
+          ${km}
+          ${maps}
+        </div>
+      </div>
+      ${r.data ? `<p class="text-xs text-gray-300 mt-1 text-right">Coleta: ${esc(r.data)}</p>` : ''}
+    </div>`;
+}
+
+function renderCards(append = false) {
+  const container = $('cards-container');
+  if (!append) { container.innerHTML = ''; shown = 0; }
+
+  if (filtered.length === 0 && !append) { hide('cards-container'); show('empty-box'); hide('load-more-wrap'); return; }
+  hide('empty-box'); show('cards-container');
+
+  const slice = filtered.slice(shown, shown + PAGE);
+  container.insertAdjacentHTML('beforeend', slice.map(renderCard).join(''));
+  shown += slice.length;
+
+  $('count-label').textContent = `${filtered.length} posto${filtered.length !== 1 ? 's' : ''}`;
+
+  if (shown < filtered.length) show('load-more-wrap');
+  else hide('load-more-wrap');
+}
+
+/* ── Filter + Sort ───────────────────────────── */
 function applyFilters() {
-  const product = $('filter-product').value.toUpperCase();
-  const bairro  = $('filter-bairro').value.toLowerCase();
-  const q       = $('filter-search').value.toLowerCase().trim();
-  filtered = allItems.filter(r => {
-    if (product && !r.produto.includes(product))             return false;
-    if (bairro  && !r.bairro.toLowerCase().includes(bairro)) return false;
-    if (q && !r.nome.toLowerCase().includes(q) &&
-             !r.bairro.toLowerCase().includes(q) &&
-             !r.endereco.toLowerCase().includes(q) &&
-             !r.bandeira.toLowerCase().includes(q))          return false;
-    return true;
-  });
-  sortRows(); page = 1; renderTable();
-}
+  let rows = [...allItems];
 
-function sortRows() {
-  filtered.sort((a,b) => {
-    let va=a[sortCol], vb=b[sortCol];
-    if (typeof va==='string') { va=va.toLowerCase(); vb=vb.toLowerCase(); }
-    return va<vb ? (sortDir==='asc'?-1:1) : va>vb ? (sortDir==='asc'?1:-1) : 0;
-  });
-}
-
-// ── Table ─────────────────────────────────────
-const BADGE = {
-  'ETANOL HIDRATADO':'bg-green-100 text-green-800','GASOLINA COMUM':'bg-blue-100 text-blue-800',
-  'GASOLINA ADITIVADA':'bg-indigo-100 text-indigo-800','DIESEL S10':'bg-yellow-100 text-yellow-800',
-  'DIESEL':'bg-orange-100 text-orange-800','GNV':'bg-purple-100 text-purple-800',
-};
-function badgeClass(p) { for (const [k,v] of Object.entries(BADGE)) if (p.includes(k)) return v; return 'bg-gray-100 text-gray-700'; }
-
-function renderTable() {
-  const slice = filtered.slice((page-1)*PG_SZ, page*PG_SZ);
-  $('count-label').textContent = filtered.length;
-  if (!filtered.length) { hide('table-section'); show('empty-box'); return; }
-  hide('empty-box'); show('table-section');
-  $('table-body').innerHTML = slice.map(r=>`
-    <tr class="hover:bg-gray-50 transition">
-      <td class="px-4 py-3 font-medium max-w-xs truncate" title="${esc(r.nome)}">${esc(r.nome)}</td>
-      <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${badgeClass(r.produto)}">${esc(r.produto)}</span></td>
-      <td class="px-4 py-3 text-gray-600">${esc(r.bairro)}</td>
-      <td class="px-4 py-3 text-gray-500 text-xs">${esc(r.bandeira)}</td>
-      <td class="px-4 py-3 text-gray-500 text-xs max-w-xs truncate" title="${esc(r.endereco)}">${esc(r.endereco)}</td>
-      <td class="px-4 py-3 text-right font-bold tabular-nums">R$ ${fmt(r.preco)}</td>
-      <td class="px-4 py-3 text-right text-gray-400 text-xs whitespace-nowrap">${esc(r.data)}</td>
-    </tr>`).join('');
-  renderPagination();
-}
-
-function renderPagination() {
-  const total = Math.ceil(filtered.length/PG_SZ);
-  const pg = $('pagination'); if (total<=1) { pg.innerHTML=''; return; }
-  const btn = (p,lbl,dis) => `<button onclick="goPage(${p})" ${dis?'disabled':''} class="px-3 py-1.5 rounded-lg text-sm font-medium border transition ${p===page?'bg-blue-600 text-white border-blue-600':dis?'text-gray-300 border-gray-200 cursor-default':'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}">${lbl}</button>`;
-  let html = btn(page-1,'‹',page===1);
-  for (let p=1;p<=total;p++) {
-    if (p===1||p===total||Math.abs(p-page)<=1) html+=btn(p,p,false);
-    else if (Math.abs(p-page)===2) html+=`<span class="px-1 text-gray-400">…</span>`;
+  if (prodFilt) rows = rows.filter(r => r.produto.includes(prodFilt));
+  if (searchQ) {
+    const t = searchQ.toLowerCase();
+    rows = rows.filter(r =>
+      r.nome.toLowerCase().includes(t) ||
+      r.bairro.toLowerCase().includes(t) ||
+      r.endereco.toLowerCase().includes(t));
   }
-  html+=btn(page+1,'›',page===total); pg.innerHTML=html;
+
+  // Ordenação
+  if (sortMode === 'distancia' && rows.some(r => r.distancia != null)) {
+    rows.sort((a,b) => {
+      const da = a.distancia ?? Infinity;
+      const db = b.distancia ?? Infinity;
+      return da - db;
+    });
+  } else {
+    rows.sort((a,b) => a.preco - b.preco);
+  }
+
+  filtered = rows;
+  renderCards(false);
 }
 
-function goPage(p) {
-  const total=Math.ceil(filtered.length/PG_SZ);
-  if (p<1||p>total) return;
-  page=p; renderTable(); window.scrollTo({top:0,behavior:'smooth'});
+/* ── GPS ─────────────────────────────────────── */
+function setUserCoords(lat, lng) {
+  userLat = lat; userLng = lng;
+  // Adiciona distância a todos os itens
+  allItems = allItems.map(r => ({
+    ...r,
+    distancia: r.lat && r.lng
+      ? +haversine(lat, lng, r.lat, r.lng).toFixed(2)
+      : null,
+  }));
+  sortMode = 'distancia';
+  updateSortUI();
+  applyFilters();
 }
 
-// ── Upload CSV ────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.asin(Math.sqrt(a));
+}
+
+function requestGps() {
+  if (!navigator.geolocation) {
+    alert('Seu navegador não suporta GPS.'); return;
+  }
+  show('gps-loading');
+  $('gps-btn').classList.add('locating');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      hide('gps-loading');
+      $('gps-btn').classList.remove('locating');
+      $('gps-btn').textContent = '📍 Localizado';
+      setUserCoords(pos.coords.latitude, pos.coords.longitude);
+    },
+    err => {
+      hide('gps-loading');
+      $('gps-btn').classList.remove('locating');
+      const msgs = {1:'Permissão negada. Libere o GPS nas configurações do navegador.',2:'GPS indisponível.',3:'Timeout ao obter localização.'};
+      alert(msgs[err.code] || 'Erro ao obter localização.');
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+  );
+}
+
+/* ── Sort UI ─────────────────────────────────── */
+function updateSortUI() {
+  document.querySelectorAll('.sort-opt').forEach(b => {
+    const active = b.dataset.sort === sortMode;
+    b.className = `sort-opt px-2 py-0.5 rounded-full text-xs font-semibold transition ${
+      active ? 'bg-blue-100 text-blue-700' : 'bg-white border border-gray-300 text-gray-600'}`;
+  });
+}
+
+/* ── Carrega dados ───────────────────────────── */
+async function loadAll() {
+  show('loading'); hide('error-box'); hide('summary-bar'); hide('cards-container'); hide('empty-box');
+
+  try {
+    const params = new URLSearchParams({ limit: 1000 });
+    if (userLat !== null) { params.set('lat', userLat); params.set('lng', userLng); }
+
+    const [dataRes, pRes] = await Promise.all([
+      fetch(`${API}/precos?${params}`).then(r=>r.json()),
+      fetch(`${API}/produtos`).then(r=>r.json()),
+    ]);
+
+    if (!dataRes.success) throw new Error(dataRes.error || 'Erro desconhecido');
+
+    allItems = dataRes.items;
+    if (dataRes.meta?.periodo) $('periodo-label').textContent = dataRes.meta.periodo;
+
+    if (dataRes.demo) show('demo-banner'); else hide('demo-banner');
+
+    renderSummary(dataRes.summary || []);
+    applyFilters();
+  } catch(err) {
+    $('error-msg').textContent = err.message;
+    show('error-box');
+  } finally {
+    hide('loading');
+  }
+}
+
+/* ── Upload ──────────────────────────────────── */
 async function handleFile(file) {
   if (!file) return;
   const st = $('upload-status');
   st.textContent = `Lendo ${file.name}…`;
   try {
     const text = await file.text();
-    st.textContent = 'Enviando para o servidor…';
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/csv' },
-      body: text,
-    }).then(r=>r.json());
+    st.textContent = 'Enviando…';
+    const res = await fetch('/api/upload', { method:'POST', headers:{'Content-Type':'text/csv'}, body:text }).then(r=>r.json());
     if (!res.success) throw new Error(res.error);
     st.textContent = `✅ ${res.rows} registros carregados!`;
-    hide('demo-banner');
-    await loadAll(false);
-  } catch(err) {
-    st.textContent = `❌ Erro: ${err.message}`;
-  }
+    hide('upload-panel');
+    await loadAll();
+  } catch(err) { st.textContent = `❌ ${err.message}`; }
 }
-function handleDrop(e) {
-  e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
-}
+function handleDrop(e) { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }
 
-// ── Eventos ───────────────────────────────────
-$('filter-product').addEventListener('change', applyFilters);
-$('filter-bairro').addEventListener('change',  applyFilters);
-$('filter-search').addEventListener('input',   applyFilters);
-$('btn-refresh').addEventListener('click', () => loadAll(true));
-$('btn-toggle-upload').addEventListener('click', () => {
-  const s = $('upload-section');
-  s.classList.toggle('hidden');
+/* ── Eventos ─────────────────────────────────── */
+$('gps-btn').addEventListener('click', requestGps);
+
+$('search').addEventListener('input', e => {
+  searchQ = e.target.value.trim();
+  applyFilters();
 });
 
-document.querySelectorAll('th[data-sort]').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.sort;
-    sortDir = sortCol===col && sortDir==='asc'?'desc':'asc';
-    sortCol = col;
-    document.querySelectorAll('th[data-sort]').forEach(h=>h.classList.remove('asc','desc'));
-    th.classList.add(sortDir);
-    sortRows(); renderTable();
+document.querySelectorAll('.btn-produto').forEach(btn => {
+  btn.addEventListener('click', () => {
+    prodFilt = btn.dataset.produto;
+    document.querySelectorAll('.btn-produto').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
   });
 });
 
-function esc(s)  { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmt(n)  { return Number(n).toFixed(2).replace('.',','); }
+document.querySelectorAll('.sort-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.sort === 'distancia' && userLat === null) {
+      requestGps(); return;
+    }
+    sortMode = btn.dataset.sort;
+    updateSortUI();
+    applyFilters();
+  });
+});
 
-loadAll(false);
+$('btn-load-more').addEventListener('click', () => renderCards(true));
+
+$('btn-upload').addEventListener('click', () => {
+  $('upload-panel').classList.toggle('hidden');
+});
+
+/* ── Utils ───────────────────────────────────── */
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmt(n) { return Number(n).toFixed(2).replace('.',','); }
+
+/* ── Init ────────────────────────────────────── */
+loadAll();
 </script>
 </body>
 </html>
