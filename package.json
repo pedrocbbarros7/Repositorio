@@ -1,0 +1,15 @@
+{
+  "name": "combustiveis-sao-luis",
+  "version": "1.0.0",
+  "description": "Preços de combustíveis em São Luís, MA — dados ANP",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "iconv-lite": "^0.6.3",
+    "csv-parse": "^5.5.5"
+  }
+}
