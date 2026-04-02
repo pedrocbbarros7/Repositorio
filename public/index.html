@@ -399,6 +399,27 @@ function fmt(n) { return Number(n).toFixed(2).replace('.',','); }
 
 /* ── Init ────────────────────────────────────── */
 loadAll();
+
+// Verifica a cada 15s se a ANP terminou de carregar e atualiza silenciosamente
+let anpPoller = setInterval(async () => {
+  try {
+    const st = await fetch('/api/status').then(r => r.json());
+    if (!st.demo && st.rows > 0) {
+      clearInterval(anpPoller);
+      // Recarrega silenciosamente com dados reais
+      const params = new URLSearchParams({ limit: 1000 });
+      if (userLat !== null) { params.set('lat', userLat); params.set('lng', userLng); }
+      const data = await fetch(`/api/precos?${params}`).then(r => r.json());
+      if (data.success && !data.demo) {
+        allItems = data.items;
+        if (data.meta?.periodo) $('periodo-label').textContent = data.meta.periodo;
+        hide('demo-banner');
+        renderSummary(data.summary || []);
+        applyFilters();
+      }
+    }
+  } catch(e) { /* ignora */ }
+}, 15000);
 </script>
 </body>
 </html>

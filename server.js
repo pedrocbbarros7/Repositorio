@@ -287,8 +287,14 @@ async function fetchAnpData() {
 
 async function getCached() {
   if (cache && (Date.now() - cache.fetchedAt) < CACHE_TTL_MS) return cache;
-  const data = await fetchAnpData();
-  cache = { ...data, fetchedAt: Date.now() };
+  // Retorna amostra imediatamente se não há cache, e busca ANP em background
+  if (!cache) {
+    cache = { rows: SAMPLE_ROWS, periodo: '2026/Semestre 01 (amostra)', source: 'amostra', demo: true, fetchedAt: Date.now() };
+    fetchAnpData().then(data => {
+      cache = { ...data, fetchedAt: Date.now() };
+      console.log(`[Cache] Atualizado com ${data.rows.length} registros (${data.demo ? 'amostra' : 'ANP real'})`);
+    }).catch(err => console.error('[Cache] Erro ao atualizar:', err.message));
+  }
   return cache;
 }
 
@@ -417,4 +423,6 @@ app.get('/api/bairros', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n⛽  Combustíveis São Luís — http://localhost:${PORT}`);
   console.log(`   API: http://localhost:${PORT}/api/precos\n`);
+  // Pré-aquece o cache na inicialização (não bloqueia o servidor)
+  getCached().catch(() => {});
 });
