@@ -26,15 +26,41 @@ let cache = null;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 // ──────────────────────────────────────────────
-// URLs ANP
+// URLs ANP — descobre dinamicamente na página de dados abertos
 // ──────────────────────────────────────────────
-function candidateUrls() {
+async function candidateUrls() {
+  const base = 'https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/arquivos/shpc/ca';
+
+  // Tenta descobrir URLs reais raspando a página de dados abertos da ANP
+  try {
+    const html = (await download(
+      'https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/serie-historica-de-precos-de-combustiveis'
+    )).toString('utf8');
+
+    // Extrai todos os links para arquivos ca-YYYY-SS.csv
+    const matches = [...html.matchAll(/href="([^"]*ca-\d{4}-\d{2}\.csv[^"]*)"/gi)]
+      .map(m => {
+        let u = m[1];
+        if (u.startsWith('/')) u = 'https://www.gov.br' + u;
+        return u;
+      });
+
+    if (matches.length > 0) {
+      // Ordena do mais recente para o mais antigo
+      matches.sort((a, b) => b.localeCompare(a));
+      console.log(`[ANP] Encontradas ${matches.length} URLs na página:`, matches.slice(0, 2));
+      return matches.slice(0, 3);
+    }
+  } catch (err) {
+    console.warn('[ANP] Não foi possível raspar a página:', err.message);
+  }
+
+  // Fallback: constrói URLs pelo semestre atual e anterior
   const now  = new Date();
   const year = now.getFullYear();
   const sem  = now.getMonth() < 6 ? '01' : '02';
   const prevYear = year - (sem === '01' ? 1 : 0);
   const prevSem  = sem === '01' ? '02' : '01';
-  const base = 'https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/arquivos/shpc/ca';
   return [
     `${base}/ca-${year}-${sem}.csv`,
     `${base}/ca-${prevYear}-${prevSem}.csv`,
@@ -44,13 +70,13 @@ function candidateUrls() {
 // ──────────────────────────────────────────────
 // Download
 // ──────────────────────────────────────────────
-function download(url, maxRedirects = 5) {
+function download(url, maxRedirects = 5, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const proto = url.startsWith('https') ? https : http;
-    const req = proto.get(url, { timeout: 30000 }, res => {
+    const req = proto.get(url, { timeout: timeoutMs }, res => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
         if (maxRedirects === 0) return reject(new Error('Muitos redirecionamentos'));
-        return resolve(download(res.headers.location, maxRedirects - 1));
+        return resolve(download(res.headers.location, maxRedirects - 1, timeoutMs));
       }
       if (res.statusCode !== 200)
         return reject(new Error(`HTTP ${res.statusCode}`));
@@ -241,11 +267,11 @@ const SAMPLE_ROWS = (() => {
 // Fetch ANP (com fallback)
 // ──────────────────────────────────────────────
 async function fetchAnpData() {
-  const urls = candidateUrls();
+  const urls = await candidateUrls();
   for (const url of urls) {
     try {
       console.log(`[ANP] Baixando ${url}…`);
-      const buffer  = await download(url);
+      const buffer  = await download(url, 5, 60000);
       const allRows = await parseCsvBuffer(buffer);
       const rows    = enrichWithCoords(filterSaoLuis(allRows));
       console.log(`[ANP] ${rows.length} registros para São Luís, MA`);
