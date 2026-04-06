@@ -232,15 +232,15 @@ const SAMPLE_ROWS = (() => {
   ];
 
   const basePrices = {
-    'ETANOL HIDRATADO':   [4.69, 4.75, 4.85, 4.92, 4.99, 5.05, 5.10, 5.19],
-    'GASOLINA COMUM':     [6.29, 6.35, 6.42, 6.48, 6.55, 6.63, 6.70, 6.79],
-    'GASOLINA ADITIVADA': [6.59, 6.65, 6.72, 6.79, 6.85, 6.93, 7.00, 7.09],
-    'DIESEL S10':         [6.05, 6.09, 6.14, 6.19, 6.24, 6.30, 6.39, 6.45],
-    'DIESEL':             [5.99, 6.04, 6.09, 6.14, 6.19, 6.24, 6.29, 6.35],
-    'GNV':                [4.19, 4.25, 4.29, 4.35, 4.39, 4.45, 4.49, 4.55],
+    'ETANOL HIDRATADO':   [5.60, 5.65, 5.69, 5.75, 5.79, 5.82, 5.87, 5.90],
+    'GASOLINA COMUM':     [6.09, 6.15, 6.19, 6.25, 6.29, 6.35, 6.39, 6.45],
+    'GASOLINA ADITIVADA': [6.40, 6.45, 6.49, 6.55, 6.59, 6.65, 6.72, 6.79],
+    'DIESEL S10':         [5.90, 5.95, 5.99, 6.05, 6.09, 6.14, 6.17, 6.20],
+    'DIESEL':             [5.75, 5.79, 5.83, 5.87, 5.92, 5.96, 6.00, 6.05],
+    'GNV':                [4.29, 4.35, 4.39, 4.45, 4.49, 4.55, 4.59, 4.65],
   };
 
-  const coleta = '22/03/2026';
+  const coleta = '28/03/2026';
   const rows = []; let idx = 0;
 
   for (const [nome, bairro, rua, numero, bandeira, cnpj] of stations) {
@@ -282,14 +282,14 @@ async function fetchAnpData() {
     }
   }
   console.warn('[ANP] Usando dados de amostra');
-  return { rows: SAMPLE_ROWS, periodo: '2026/Semestre 01 (amostra)', source: 'amostra', demo: true };
+  return { rows: SAMPLE_ROWS, periodo: 'Edição 13/2026 – Semana 22 a 28/03/2026 (amostra)', source: 'amostra', demo: true };
 }
 
 async function getCached() {
   if (cache && (Date.now() - cache.fetchedAt) < CACHE_TTL_MS) return cache;
   // Retorna amostra imediatamente se não há cache, e busca ANP em background
   if (!cache) {
-    cache = { rows: SAMPLE_ROWS, periodo: '2026/Semestre 01 (amostra)', source: 'amostra', demo: true, fetchedAt: Date.now() };
+    cache = { rows: SAMPLE_ROWS, periodo: 'Edição 13/2026 – Semana 22 a 28/03/2026 (amostra)', source: 'amostra', demo: true, fetchedAt: Date.now() };
     fetchAnpData().then(data => {
       cache = { ...data, fetchedAt: Date.now() };
       console.log(`[Cache] Atualizado com ${data.rows.length} registros (${data.demo ? 'amostra' : 'ANP real'})`);
