@@ -146,7 +146,7 @@ function normaliseDate(d) {
   return d ? d.split(' ')[0] : '';
 }
 function filterSaoLuis(rows) {
-  return rows
+  const filtered = rows
     .filter(r => {
       const mun = (r['Municipio'] || '').toUpperCase().trim();
       const uf  = (r['Estado - Sigla'] || r['Estado'] || '').toUpperCase().trim();
@@ -154,6 +154,28 @@ function filterSaoLuis(rows) {
     })
     .map(normalise)
     .filter(Boolean);
+
+  if (filtered.length === 0) return filtered;
+
+  // O CSV é cumulativo (desde 2004). Pega só a coleta mais recente.
+  // Converte "dd/mm/yyyy" para Date para comparar corretamente.
+  function parseDate(str) {
+    if (!str) return new Date(0);
+    const parts = str.split('/');
+    if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+    return new Date(str);
+  }
+
+  const maxDate = filtered.reduce((max, r) => {
+    const d = parseDate(r.data);
+    return d > max ? d : max;
+  }, new Date(0));
+
+  // Aceita registros dentro de 14 dias antes da data mais recente
+  const cutoff = new Date(maxDate);
+  cutoff.setDate(cutoff.getDate() - 14);
+
+  return filtered.filter(r => parseDate(r.data) >= cutoff);
 }
 
 // ──────────────────────────────────────────────
