@@ -30,15 +30,19 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // ──────────────────────────────────────────────
 async function candidateUrls() {
   const base = 'https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/arquivos/shpc/ca';
+  const now  = new Date();
+  const year = now.getFullYear();
 
   // Tenta descobrir URLs reais raspando a página de dados abertos da ANP
   try {
     const html = (await download(
-      'https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/serie-historica-de-precos-de-combustiveis'
+      'https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/serie-historica-de-precos-de-combustiveis',
+      5, 15000
     )).toString('utf8');
 
-    // Extrai todos os links para arquivos ca-YYYY-SS.csv
-    const matches = [...html.matchAll(/href="([^"]*ca-\d{4}-\d{2}\.csv[^"]*)"/gi)]
+    // Extrai links ca-YYYY-SS.csv — só dos últimos 2 anos
+    const matches = [...html.matchAll(/href="([^"]*ca-(\d{4})-(\d{2})\.csv[^"]*)"/gi)]
+      .filter(m => parseInt(m[2]) >= year - 1)   // só arquivos recentes
       .map(m => {
         let u = m[1];
         if (u.startsWith('/')) u = 'https://www.gov.br' + u;
@@ -46,19 +50,16 @@ async function candidateUrls() {
       });
 
     if (matches.length > 0) {
-      // Ordena do mais recente para o mais antigo
-      matches.sort((a, b) => b.localeCompare(a));
-      console.log(`[ANP] Encontradas ${matches.length} URLs na página:`, matches.slice(0, 2));
-      return matches.slice(0, 3);
+      matches.sort((a, b) => b.localeCompare(a)); // mais recente primeiro
+      console.log(`[ANP] Encontradas ${matches.length} URLs recentes:`, matches.slice(0, 2));
+      return matches.slice(0, 2);
     }
   } catch (err) {
     console.warn('[ANP] Não foi possível raspar a página:', err.message);
   }
 
   // Fallback: constrói URLs pelo semestre atual e anterior
-  const now  = new Date();
-  const year = now.getFullYear();
-  const sem  = now.getMonth() < 6 ? '01' : '02';
+  const sem      = now.getMonth() < 6 ? '01' : '02';
   const prevYear = year - (sem === '01' ? 1 : 0);
   const prevSem  = sem === '01' ? '02' : '01';
   return [
@@ -274,7 +275,19 @@ async function fetchAnpData() {
       const buffer  = await download(url, 5, 60000);
       const allRows = await parseCsvBuffer(buffer);
       const rows    = enrichWithCoords(filterSaoLuis(allRows));
-      console.log(`[ANP] ${rows.length} registros para São Luís, MA`);
+      if (rows.length === 0) throw new Error('Nenhum registro de São Luís neste arquivo');
+
+      // Rejeita arquivos com dados mais antigos que 2 anos
+      const datas = rows.map(r => r.data).filter(Boolean);
+      if (datas.length > 0) {
+        const amostra = datas[0];
+        const ano = parseInt(amostra.split('/')[2]) || parseInt(amostra.split('-')[0]);
+        if (ano && ano < new Date().getFullYear() - 1) {
+          throw new Error(`Arquivo com dados muito antigos (${ano}), ignorando`);
+        }
+      }
+
+      console.log(`[ANP] ${rows.length} registros para São Luís, MA | data: ${rows[0]?.data}`);
       const m = url.match(/ca-(\d{4})-(\d{2})\.csv/);
       return { rows, periodo: m ? `${m[1]}/Semestre ${m[2]}` : 'atual', source: url, demo: false };
     } catch (err) {
