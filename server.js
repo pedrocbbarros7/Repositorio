@@ -453,11 +453,66 @@ app.get('/api/bairros', async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// Atualização automática semanal
+// ANP publica toda sexta-feira. Verificamos diariamente às 18h (horário Brasília)
+// se há dados novos. Se a coleta mais recente no cache for diferente da nova,
+// atualiza silenciosamente.
+// ──────────────────────────────────────────────
+function latestDataDate(rows) {
+  if (!rows || rows.length === 0) return null;
+  const datas = rows.map(r => r.data).filter(Boolean);
+  return datas.sort().reverse()[0] || null;
+}
+
+async function autoRefresh() {
+  try {
+    console.log('[AutoRefresh] Verificando dados novos na ANP…');
+    const novosDados = await fetchAnpData();
+    const dataAtual  = latestDataDate(cache?.rows);
+    const dataNova   = latestDataDate(novosDados.rows);
+
+    if (!novosDados.demo && dataNova && dataNova !== dataAtual) {
+      cache = { ...novosDados, fetchedAt: Date.now() };
+      console.log(`[AutoRefresh] ✅ Cache atualizado! Nova coleta: ${dataNova} (anterior: ${dataAtual})`);
+    } else if (novosDados.demo) {
+      console.log('[AutoRefresh] ANP indisponível, mantendo cache atual.');
+    } else {
+      console.log(`[AutoRefresh] Sem dados novos (coleta atual: ${dataAtual}).`);
+    }
+  } catch (err) {
+    console.error('[AutoRefresh] Erro:', err.message);
+  }
+}
+
+function agendarRefreshDiario() {
+  // Calcula quanto tempo falta para as 18h no fuso de Brasília (UTC-3)
+  const agora    = new Date();
+  const brasilOffset = -3 * 60; // UTC-3 em minutos
+  const utcNow   = agora.getTime() + agora.getTimezoneOffset() * 60000;
+  const brasilia = new Date(utcNow + brasilOffset * 60000);
+
+  const alvo = new Date(brasilia);
+  alvo.setHours(18, 0, 0, 0);
+  if (brasilia >= alvo) alvo.setDate(alvo.getDate() + 1); // próximo dia se já passou
+
+  const msAteAlvo = alvo - brasilia;
+  console.log(`[AutoRefresh] Próxima verificação em ${(msAteAlvo / 3600000).toFixed(1)}h (18h00 horário Brasília)`);
+
+  setTimeout(async () => {
+    await autoRefresh();
+    // Após a primeira execução, repete a cada 24h
+    setInterval(autoRefresh, 24 * 60 * 60 * 1000);
+  }, msAteAlvo);
+}
+
+// ──────────────────────────────────────────────
 // Start
 // ──────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n⛽  Combustíveis São Luís — http://localhost:${PORT}`);
   console.log(`   API: http://localhost:${PORT}/api/precos\n`);
-  // Pré-aquece o cache na inicialização (não bloqueia o servidor)
+  // Pré-aquece o cache na inicialização
   getCached().catch(() => {});
+  // Agenda atualização automática diária às 18h (Brasília)
+  agendarRefreshDiario();
 });
