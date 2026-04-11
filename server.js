@@ -429,13 +429,43 @@ app.post('/api/upload', async (req, res) => {
   }
 });
 
-app.post('/api/cache/clear', (req, res) => {
+// Aceita GET e POST para facilitar chamada direto do browser
+app.all('/api/cache/clear', (req, res) => {
   cache = null;
-  res.json({ success: true });
+  res.json({ success: true, message: 'Cache limpo. Buscando novos dados da ANP em background…' });
+  fetchAnpData().then(data => {
+    cache = { ...data, fetchedAt: Date.now() };
+    console.log(`[Manual] Cache atualizado: ${data.rows.length} registros, demo=${data.demo}`);
+  }).catch(err => console.error('[Manual] Erro:', err.message));
+});
+
+// Força atualização e aguarda o resultado (para uso pelo botão no app)
+app.get('/api/refresh', async (req, res) => {
+  try {
+    cache = null;
+    const data = await fetchAnpData();
+    cache = { ...data, fetchedAt: Date.now() };
+    res.json({
+      success: true,
+      demo:    data.demo,
+      rows:    data.rows.length,
+      periodo: data.periodo,
+      dataColeta: latestDataDate(data.rows),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.get('/api/status', (req, res) => {
-  res.json({ cached: !!cache, demo: cache?.demo ?? null, rows: cache?.rows.length ?? 0, periodo: cache?.periodo ?? null });
+  res.json({
+    cached:     !!cache,
+    demo:       cache?.demo ?? null,
+    rows:       cache?.rows.length ?? 0,
+    periodo:    cache?.periodo ?? null,
+    dataColeta: latestDataDate(cache?.rows),
+    fetchedAt:  cache ? new Date(cache.fetchedAt).toISOString() : null,
+  });
 });
 
 app.get('/api/produtos', async (req, res) => {
